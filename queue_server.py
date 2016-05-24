@@ -79,4 +79,5 @@ class Queue_server(object):
             
     #判断是否有错
     def is_have_failed(self):
-        return len(self.__fail_list)
+        #判断是否有失败的公众号重新加入队列中
+        return self.get_size()

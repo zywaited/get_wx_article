@@ -79,9 +79,9 @@ class Redis_server(object):
                              打印失败列表并且清空
     '''    
     def print_fail_list(self ,flush=None):
-        if self.__redis.llen(self.__fail_list) > 0:
+        self.__fail_len = self.__redis.llen(self.__fail_list)
+        if self.__fail_len > 0:
             print ''
-            self.__fail_len = self.__redis.llen(self.__fail_list)
             for i in range(self.__fail_len):
                 print 'the fail wx : {0}' . format(self.__redis.rpoplpush(self.__fail_list ,self.__list))
         elif flush:
