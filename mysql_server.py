@@ -2,6 +2,7 @@
 
 import MySQLdb
 from settings import MYSQL_SETTING,FILE_NAME
+# import time
 
 class Mysql_db(object):
     
@@ -18,16 +19,28 @@ class Mysql_db(object):
     '''
     def __init__(self ,table=MYSQL_SETTING['table'] ,host=MYSQL_SETTING['host'] ,user=MYSQL_SETTING['user'] ,passwd=MYSQL_SETTING['passwd'] ,db=MYSQL_SETTING['db'] ,port=MYSQL_SETTING['port'] ,charset=MYSQL_SETTING['charset'] ,file_name=FILE_NAME):
         self.__table = table
-        self.__db = MySQLdb.connect(host ,user ,passwd ,db ,port)
-        self.__db_cursor = self.__db.cursor()
+        self.connect(host, user, passwd, db, port, charset)
         #文件句柄
         self.__file_opener = None
         if file_name:
             self.init_file_opener(file_name)
-        self.__db.set_character_set(charset)
         
         #保存keys的值，防止出现不匹配的情况
         self.__keys_list = []
+    
+    '''
+                             连接mysql
+        @param String host 主机名
+        @param String user 用户名
+        @param String passwd 密码
+        @param String db 数据库名
+        @param String port 端口号
+        @param String charset 字符集
+    '''
+    def connect(self,host=MYSQL_SETTING['host'] ,user=MYSQL_SETTING['user'] ,passwd=MYSQL_SETTING['passwd'] ,db=MYSQL_SETTING['db'] ,port=MYSQL_SETTING['port'] ,charset=MYSQL_SETTING['charset']):
+        self.__db = MySQLdb.connect(host ,user ,passwd ,db ,port)
+        self.__db_cursor = self.__db.cursor()
+        self.__db.set_character_set(charset)
     
     '''
                              执行查询
@@ -38,7 +51,8 @@ class Mysql_db(object):
         try :
             self.__db_cursor.execute(sql)
             return self.__db_cursor.rowcount   
-        except :
+        except MySQLdb.Error as e:
+            raise 'Mysql Error %d: %s' % (e.args[0], e.args[1])
             return False
     
     '''
@@ -77,10 +91,14 @@ class Mysql_db(object):
             print sql
 #             return 0
             #有可能插入出现冲突导致失败，重试一次
-            insert_num = self.query(sql)
-            if insert_num:
-                return insert_num
             return self.query(sql)
+#             if insert_num:
+#                 return insert_num
+            #睡眠1s
+#             time.sleep(1)
+#             return self.query(sql)
+#             raise Exception('mysql insert error')
+#             return 0
         return False
     
     '''
@@ -88,7 +106,7 @@ class Mysql_db(object):
         @return int
     '''
     def get_last_time(self):
-        sql = 'select time from wp_wxarticle order by aid desc limit 1'
+        sql = 'select time from {0} order by aid desc limit 1' . format(MYSQL_SETTING['time_table'])
         last_time = self.get_one(sql)
         if last_time:
             return last_time[0]
@@ -99,7 +117,7 @@ class Mysql_db(object):
         @return tuple
     '''
     def get_all_wx(self):
-        sql = 'select wx,id from wp_wxinfo where is_exist=1'
+        sql = 'select wx,id from {0} where is_exist=1' . format(MYSQL_SETTING['info_table'])
         return self.get_all(sql)
    
     def commit(self):

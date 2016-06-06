@@ -5,12 +5,13 @@ import requests
 import time
 import random
 import json
-from settings import PAGE,LAST_TIME_FLAG,PROCESS_NUM,THREAD_NUM,AGAIN_NUM
+from settings import PAGE,LAST_TIME_FLAG,PROCESS_NUM,THREAD_NUM,AGAIN_NUM,MYSQL_COMMAND
 from mysql_server import Mysql_db
 from create_queue import create_queue
 from multiprocessing import Pool
 import threading
-import sys
+# import sys
+import subprocess
 
 #requests session 文章抓取变量
 s_article = None
@@ -20,6 +21,8 @@ s_img = None
 
 #数据库变量
 db = None
+try_lock = None
+try_flag = False
 
 #队列变量以及标志
 rq = None
@@ -66,13 +69,28 @@ def init_requests_img():
 #初始化mysql and 最小时间
 def init_mysql_server():
     global db,last_time
-    try:  
-        db = Mysql_db()
-    except:
-        print 'the Mysql connection is error , please start mysql server'
-        sys.exit()
-    if LAST_TIME_FLAG:
-        last_time = db.get_last_time()
+    sub = None
+    
+    #标志是否正在启动mysql
+    flag = False
+    while True:
+        try:  
+            db = Mysql_db()
+            if LAST_TIME_FLAG and not last_time:
+                last_time = db.get_last_time()
+            if sub:
+                sub.kill()
+            return True
+        except:
+            print 'the Mysql connection is error , please start mysql server ,but now is starting and connect later(10 sec)'
+            if not flag:
+                sub = subprocess.Popen(MYSQL_COMMAND ,shell=True)
+                flag = True
+            print 'the mysql server is starting ...'
+            #10sec后进行重试
+            time.sleep(10)
+            print 'try to connect now ...'
+#             sys.exit()
       
 #初始化公众号队列
 def init_wx_lists():
@@ -164,7 +182,11 @@ def get_wx_article_lists(article_html,id_index):
     @return String
 '''
 def get_wx_article_html(wx,page = 1):
-    result = s_article.get('http://www.gsdata.cn/query/article?q={0}&sort=-1&search_field=4&page={1}' . format(wx,page))
+    if last_time:
+        url = 'http://www.gsdata.cn/query/article?q={0}&sort=-1&search_field=4&page={1}'
+    else:
+        url = 'http://www.gsdata.cn/query/article?q={0}&post_time=0&sort=-1&search_field=4&page={1}'
+    result = s_article.get(url . format(wx,page))
     result.encoding = 'utf-8'
     return result.text
 
@@ -185,28 +207,47 @@ def get_img_link(img_hash):
     @return Void
 '''
 def merge_article_data(wx_data):
-    global article_flag
+    global article_flag,try_flag
     if not article_flag:
         article_flag = True
-    for page_num in range( PAGE ):
+    page_num = 1
+    while page_num <= PAGE:
         try:
-            article_html = get_wx_article_html(wx_data[0], page_num + 1)
+            tmp_len = len(wx_data)
+            if tmp_len > 2:
+                page_num = wx_data[tmp_len - 1]
+            article_html = get_wx_article_html(wx_data[0], page_num)
             data_objects = get_wx_article_lists(article_html,wx_data[1])
             if len(data_objects) >= 1:
-                insert_num  = db.query_all(data_objects)
-                print 'the wx : {0} and the wx_id : {1} and the page : {2} ; and insert_num : {3}' . format(wx_data[0] , wx_data[1] ,page_num+1 ,insert_num)
-                if insert_num:
-                    time.sleep(random.randint(5,20))
-                else:
+                try:
+                    insert_num  = db.query_all(data_objects)
+                except:
+                    try_lock.acquire()
+                    #此处出现2006或者2013，需要重连一次mysql
+                    if not try_flag:
+                        db.connect()
+                        try_flag = True
+                    try_lock.release()
+                    time.sleep(1)
+                    insert_num  = db.query_all(data_objects)
+                print 'the wx : {0} and the wx_id : {1} and the page : {2} ; and insert_num : {3}' . format(wx_data[0] , wx_data[1] ,page_num ,insert_num)
+                if not insert_num:
+                    wx_data = wx_data + (page_num,)
                     rq.put_fail_wx(wx_data)
-                    time.sleep(random.randint(1,5))
+                else:
+                    if try_flag:
+                        try_flag = False
             else:
     #             raise Exception('the wx_article_list fetch is false')
-                print 'the wx : {0} and the wx_id : {1} and the page : {2} is out of the time or nulll' . format(wx_data[0] , wx_data[1] ,page_num+1)
-                time.sleep(random.randint(1,5))
+                # 没有数据也标记失败
+                article_flag = False
+                print 'the wx : {0} and the wx_id : {1} and the page : {2} is out of the time or null' . format(wx_data[0] , wx_data[1] ,page_num)
+            time.sleep(random.randint(1,5))
             if not article_flag:
                 return
+            page_num += 1
         except Exception as e:
+            wx_data = wx_data + (page_num,)
             rq.put_fail_wx(wx_data)
             print e
             time.sleep(random.randint(1,5))
@@ -219,6 +260,9 @@ def merge_article_data(wx_data):
     @param queue.server queue 公众号队列 
 '''
 def create_thread(s_article_bak ,s_img_bak ,last_time_bak ,queue=None): 
+    global try_lock
+    if not try_lock:
+        try_lock = threading.Lock()
     if PROCESS_NUM:
         #资源不共享，在进程中重新声明
         global s_article,s_img,last_time,rq
@@ -241,7 +285,7 @@ def create_thread(s_article_bak ,s_img_bak ,last_time_bak ,queue=None):
         for i in xrange(THREAD_NUM):
             wx_data = rq.get()
             if wx_data:
-                print 'the wx is {0}' . format(wx_data[0])
+                print 'the wx is {0} and the thread : {1} has started' . format(wx_data[0], i)
                 t = threading.Thread(target=merge_article_data ,args=(wx_data,))
                 t.start()
                 thread_list.append(t)
@@ -272,13 +316,14 @@ def create_process():
 
 if __name__ == '__main__':
     init()
+    print 'all init_tasks is successful'
     create_process()
     while AGAIN_NUM and rq.is_have_failed():
         AGAIN_NUM -= 1
         print ''
         print '现在开始进行重试   ;  剩余次数：{0}' . format(AGAIN_NUM)
         create_process()
-        
+          
     rq.print_fail_list(True)
     
     

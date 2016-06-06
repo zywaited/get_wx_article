@@ -8,8 +8,12 @@ MYSQL_SETTING = {
                 'passwd' : '',
                 'db' : 'test',
                 'port' : 3306,
-                'charset' : 'utf8'
+                'charset' : 'utf8',
+                'time_table' : 'wp_wxarticle',
+                'info_table' : 'wp_wxinfo'
                 }
+#开启mysql命令
+MYSQL_COMMAND = ''
 
 #reids连接配置
 REDIS_FLAG = False
@@ -25,8 +29,8 @@ REDIS_SETTING = {
 PAGE = 1
 
 #进线程数配置
-PROCESS_NUM = 2
-THREAD_NUM = 3
+PROCESS_NUM = 3
+THREAD_NUM = 2
 
 #文件日志保存路径
 FILE_NAME = ''

@@ -31,7 +31,7 @@ class Queue_server(object):
      @return mixed       
     '''
     def get(self):
-        if not self.__queue.empty():
+        if not self.empty():
             return self.__queue.get()
         return False
     
@@ -68,7 +68,7 @@ class Queue_server(object):
                              打印失败列表
     '''    
     def print_fail_list(self ,flush=None):
-        if len(self.__fail_list) > 0:
+        if len(self.__fail_list) > 0 :
             for fail in self.__fail_list:
                 self.put(fail)
                 print 'the fail wx : {0}' . format(fail)
@@ -80,4 +80,4 @@ class Queue_server(object):
     #判断是否有错
     def is_have_failed(self):
         #判断是否有失败的公众号重新加入队列中
-        return self.get_size()
+        return not self.empty()
