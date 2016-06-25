@@ -29,7 +29,7 @@ rq = None
 rq_type = None
 
 #全局文章是否符合标志
-article_flag = True
+#article_flag = True
 
 #最小时间点
 last_time = 0
@@ -114,7 +114,7 @@ def print_pass_a_article(id_index,typeof):
     @return list
 '''
 def get_wx_article_lists(article_html,id_index):
-    global article_flag
+    # global article_flag
     #总数据列表
     wx_article_list = []
     
@@ -137,7 +137,7 @@ def get_wx_article_lists(article_html,id_index):
             pub_time = int(time.mktime(time.strptime(pub_time[1],'%Y-%m-%d %H:%M:%S')))
             #判断时间是否合理
             if pub_time <= last_time:
-                article_flag = False
+                # article_flag = False
 #                 print 'out of the time and return'
                 return wx_article_list            
         wx_article_object['time'] = str(pub_time)
@@ -182,11 +182,12 @@ def get_wx_article_lists(article_html,id_index):
     @return String
 '''
 def get_wx_article_html(wx,page = 1):
-    if last_time:
-        url = 'http://www.gsdata.cn/query/article?q={0}&sort=-1&search_field=4&page={1}'
-    else:
-        url = 'http://www.gsdata.cn/query/article?q={0}&post_time=0&sort=-1&search_field=4&page={1}'
-    result = s_article.get(url . format(wx,page))
+    # if last_time:
+    #    url = 'http://www.gsdata.cn/query/article?q={0}&sort=-1&search_field=4&page={1}'
+    # else:
+    #    url = 'http://www.gsdata.cn/query/article?q={0}&post_time=0&sort=-1&search_field=4&page={1}'
+    url = 'http://www.gsdata.cn/query/article?q={0}&post_time=0&sort=-1&search_field=4&page={1}' . format(wx,page)
+    result = s_article.get(url)
     result.encoding = 'utf-8'
     return result.text
 
@@ -207,9 +208,7 @@ def get_img_link(img_hash):
     @return Void
 '''
 def merge_article_data(wx_data):
-    global article_flag,try_flag
-    if not article_flag:
-        article_flag = True
+    global try_flag
     page_num = 1
     while page_num <= PAGE:
         try:
@@ -218,7 +217,8 @@ def merge_article_data(wx_data):
                 page_num = wx_data[tmp_len - 1]
             article_html = get_wx_article_html(wx_data[0], page_num)
             data_objects = get_wx_article_lists(article_html,wx_data[1])
-            if len(data_objects) >= 1:
+            fetch_num = len(data_objects)
+            if fetch_num >= 1:
                 try:
                     insert_num  = db.query_all(data_objects)
                 except:
@@ -239,11 +239,9 @@ def merge_article_data(wx_data):
                         try_flag = False
             else:
     #             raise Exception('the wx_article_list fetch is false')
-                # 没有数据也标记失败
-                article_flag = False
                 print 'the wx : {0} and the wx_id : {1} and the page : {2} is out of the time or null' . format(wx_data[0] , wx_data[1] ,page_num)
             time.sleep(random.randint(1,5))
-            if not article_flag:
+            if fetch_num < 20:
                 return
             page_num += 1
         except Exception as e:
